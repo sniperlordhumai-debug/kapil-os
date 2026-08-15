@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Mic, Square, Loader2, Play, Pause, Trash2, AudioLines } from "lucide-react";
 
-const MAX_MS = 60_000; // 60s cap (keeps attachment small, under Resend's 10MB limit)
+const MAX_MS = 60_000; // 60s cap (keeps media size small and reliable)
 
 export interface VoiceResult {
   blob: Blob;

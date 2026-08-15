@@ -6,11 +6,11 @@ import {
   getClientIp,
   isSameOrigin,
   verifyTurnstile,
-  sendViaResend,
-  buildMessageBody,
-  buildAutoReplyBody,
+  sendViaTelegram,
+  sendVoiceViaTelegram,
+  sendVideoViaTelegram,
+  buildTelegramMessage,
 } from "@/lib/security";
-import { site } from "@/data/site";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs"; // fetch-based email + crypto; node runtime avoids edge limits
@@ -36,9 +36,9 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // --- Request size limit (raised to allow an audio voice message) ---
+  // --- Request size limit (raised to allow voice/video messages) ---
   const contentLength = Number(request.headers.get("content-length") || 0);
-  const MAX_BODY = 7 * 1024 * 1024; // 7 MB — covers base64 of a ~60s voice note
+  const MAX_BODY = 25 * 1024 * 1024; // 25 MB — covers a ~60s video note
   if (contentLength > MAX_BODY) {
     return NextResponse.json({ error: "Request too large." }, { status: 413 });
   }
@@ -72,58 +72,76 @@ export async function POST(request: NextRequest) {
   }
 
   // --- Optional voice attachment (base64) -----------------------------
-  let attachment: { filename: string; content: string } | null = null;
+  let voice: { filename: string; content: string } | null = null;
   if (body.audioData) {
     const audioData = typeof body.audioData === "string" ? body.audioData : "";
-    const audioName = typeof body.audioName === "string" ? body.audioName : "voice-note.webm";
     if (audioData) {
-      // validate it's base64-ish and cap decoded size
       const approxBytes = Math.floor((audioData.length * 3) / 4);
       if (approxBytes > 5 * 1024 * 1024) {
         return NextResponse.json({ error: "Voice message is too large." }, { status: 413 });
       }
-      // safe filename
+      const audioName = typeof body.audioName === "string" ? body.audioName : "voice-note.webm";
       const cleanName = audioName.replace(/[^a-zA-Z0-9._-]/g, "").slice(0, 60) || "voice-note.webm";
-      attachment = { filename: cleanName, content: audioData };
+      voice = { filename: cleanName, content: audioData };
     }
   }
 
-  // --- Deliver (server-side, no client exposure) ----------------------
-  const resendKey = process.env.RESEND_API_KEY;
-  const from = process.env.CONTACT_FROM_EMAIL;
-  const to = process.env.CONTACT_TO_EMAIL || site.email;
+  // --- Optional video attachment (base64) -----------------------------
+  let video: { filename: string; content: string } | null = null;
+  if (body.videoData) {
+    const videoData = typeof body.videoData === "string" ? body.videoData : "";
+    if (videoData) {
+      const approxBytes = Math.floor((videoData.length * 3) / 4);
+      if (approxBytes > 20 * 1024 * 1024) {
+        return NextResponse.json({ error: "Video message is too large." }, { status: 413 });
+      }
+      const videoName = typeof body.videoName === "string" ? body.videoName : "video-message.mp4";
+      const cleanName = videoName.replace(/[^a-zA-Z0-9._-]/g, "").slice(0, 60) || "video-message.mp4";
+      video = { filename: cleanName, content: videoData };
+    }
+  }
 
-  if (resendKey && from) {
-    // 1. Deliver the visitor's message + optional voice note to Kapil.
-    let text = buildMessageBody(validated.name, validated.email, validated.message);
-    if (attachment) text += `\n\n[Voice message attached: ${attachment.filename}]`;
-    const sent = await sendViaResend(
-      resendKey,
-      from,
-      to,
-      `Portfolio message from ${validated.name}`,
-      text,
-      attachment ? [attachment] : undefined
-    );
+  // --- Deliver to Telegram (server-side, no client exposure) ---------
+  const tgToken = process.env.TELEGRAM_BOT_TOKEN;
+  const tgChat = process.env.TELEGRAM_CHAT_ID;
 
-    // 2. Send the visitor an automatic confirmation reply.
-    const autoReplied = await sendViaResend(
-      resendKey,
-      from,
+  if (tgToken && tgChat) {
+    // 1. Send the voice note (if present).
+    if (voice && voice.content.length > 0) {
+      const caption = `Voice message from ${validated.name} (${validated.email})`;
+      const sent = await sendVoiceViaTelegram(tgToken, tgChat, voice.content, caption);
+      if (!sent) {
+        return NextResponse.json({ error: "Could not deliver the voice message." }, { status: 502 });
+      }
+    }
+
+    // 2. Send the video (if present).
+    if (video && video.content.length > 0) {
+      const caption = `Video message from ${validated.name} (${validated.email})`;
+      const sent = await sendVideoViaTelegram(tgToken, tgChat, video.content, caption);
+      if (!sent) {
+        return NextResponse.json({ error: "Could not deliver the video message." }, { status: 502 });
+      }
+    }
+
+    // 3. Send the text details (name, email, message).
+    const text = buildTelegramMessage(
+      validated.name,
       validated.email,
-      "Thanks for reaching out — Kapil OS",
-      buildAutoReplyBody(validated.name)
+      validated.message,
+      !!(voice && voice.content.length > 0),
+      !!(video && video.content.length > 0)
     );
-
+    const sent = await sendViaTelegram(tgToken, tgChat, text);
     if (sent) {
       return NextResponse.json({ ok: true, message: "Message sent. Thank you!" });
     }
     return NextResponse.json({ error: "Could not deliver the message right now." }, { status: 502 });
   }
 
-  // Email delivery not configured: respond clearly (never fake success).
+  // Delivery not configured: respond clearly (never fake success).
   return NextResponse.json(
-    { error: "Contact delivery is not configured yet. Please email me directly." },
+    { error: "Contact delivery is not configured yet. Please try emailing me directly." },
     { status: 503 }
   );
 }

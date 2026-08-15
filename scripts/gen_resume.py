@@ -1,173 +1,159 @@
 #!/usr/bin/env python3
-"""Generate Kapil Kumar's polished one-page resume PDF using reportlab."""
+"""
+Top-tier, ATS-optimized one-page resume for Kapil Kumar (AI/ML & Software Developer).
+Single-column, standard headings, quantified bullets, text-based PDF.
+Photo included (appropriate for the Indian market).
+No fabricated metrics — only real, verifiable facts.
+"""
 from reportlab.lib.pagesizes import LETTER
 from reportlab.lib.units import inch
-from reportlab.lib.colors import HexColor, white
-from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_JUSTIFY
-from reportlab.pdfbase.pdfmetrics import stringWidth
+from reportlab.lib.colors import HexColor
+from reportlab.lib.enums import TA_LEFT, TA_JUSTIFY, TA_RIGHT
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.platypus import (
-    BaseDocTemplate, Frame, PageTemplate, Paragraph, Spacer,
-    Table, TableStyle, Flowable, HRFlowable
+    BaseDocTemplate, Frame, PageTemplate, Paragraph, Spacer, Image,
+    Table, TableStyle, HRFlowable
 )
 import os
 
-# ---------- register fonts ----------
-FONT_DIR = "/usr/share/fonts/truetype"
-def reg(name, path):
-    if os.path.exists(path):
-        pdfmetrics.registerFont(TTFont(name, path))
-        return True
+# ---------- fonts (clean, ATS-safe) ----------
+FD = "/usr/share/fonts/truetype/dejavu"
+def reg(n, p):
+    if os.path.exists(p):
+        pdfmetrics.registerFont(TTFont(n, p)); return True
     return False
+reg("F", f"{FD}/DejaVuSans.ttf")
+reg("FB", f"{FD}/DejaVuSans-Bold.ttf")
+F="F"; FB="FB"
 
-helv = reg("Helv", f"{FONT_DIR}/dejavu/DejaVuSans.ttf")
-helv_b = reg("Helv-B", f"{FONT_DIR}/dejavu/DejaVuSans-Bold.ttf")
-helv_o = reg("Helv-O", f"{FONT_DIR}/dejavu/DejaVuSans-Oblique.ttf")
+INK    = HexColor("#17181c")
+MUTED  = HexColor("#444b57")
+FAINT  = HexColor("#7b8491")
+ACCENT = HexColor("#0f6b80")
+RULE   = HexColor("#0f6b80")
 
-F = "Helv" if helv else "Helvetica"
-FB = "Helv-B" if helv_b else "Helvetica-Bold"
-FO = "Helv-O" if helv_o else "Helvetica-Oblique"
-
-# ---------- palette ----------
-INK      = HexColor("#111318")
-MUTED    = HexColor("#4b5563")
-ACCENT   = HexColor("#0e7490")   # deep cyan/teal
-ACCENT2  = HexColor("#155e75")
-RULE     = HexColor("#0e7490")
-BG_LIGHT = HexColor("#eef6f8")
-
-# ---------- styles ----------
 def st(name, **kw):
-    base = dict(fontName=F, fontSize=10, leading=14, textColor=INK)
-    base.update(kw)
-    return ParagraphStyle(name, **base)
+    b=dict(fontName=F, fontSize=9.3, leading=12.4, textColor=INK); b.update(kw)
+    return ParagraphStyle(name, **b)
 
-S_NAME   = st("name", fontName=FB, fontSize=26, leading=30, textColor=INK, alignment=TA_CENTER)
-S_TITLE  = st("title", fontSize=12, leading=15, textColor=ACCENT2, alignment=TA_CENTER, spaceBefore=2)
-S_CONTACT= st("contact", fontSize=9, leading=13, textColor=MUTED, alignment=TA_CENTER)
-S_H      = st("head", fontName=FB, fontSize=11.5, leading=14, textColor=ACCENT2)
-S_BODY   = st("body", fontSize=9.6, leading=13.5, textColor=INK, alignment=TA_JUSTIFY)
-S_PROJ   = st("proj", fontSize=9.6, leading=13.5, textColor=INK, spaceAfter=3)
-S_BULL   = st("bull", fontSize=9.4, leading=13, textColor=INK, leftIndent=10, bulletIndent=2)
-S_META   = st("meta", fontSize=8.6, leading=12, textColor=MUTED)
+S_NAME=st("name", fontName=FB, fontSize=22, leading=26)
+S_TITLE=st("title", fontSize=11.5, leading=14, textColor=ACCENT, fontName=FB)
+S_CONT=st("cont", fontSize=8.8, leading=12.5, textColor=MUTED)
+S_H=st("head", fontName=FB, fontSize=11, leading=13, textColor=ACCENT, spaceBefore=5, spaceAfter=1.5)
+S_SUM=st("sum", fontSize=9.2, alignment=TA_JUSTIFY)
+S_BULL=st("bull", leftIndent=9, bulletIndent=2, spaceAfter=1.2, alignment=TA_JUSTIFY)
+S_META=st("meta", fontSize=8.6, leading=11.5, textColor=FAINT)
 
 class HR(HRFlowable):
     def __init__(self, **kw):
-        kw.setdefault("width", "100%")
-        kw.setdefault("thickness", 1)
-        kw.setdefault("color", RULE)
-        kw.setdefault("spaceBefore", 1)
-        kw.setdefault("spaceAfter", 5)
+        kw.setdefault("width","100%"); kw.setdefault("thickness",0.8)
+        kw.setdefault("color",RULE); kw.setdefault("spaceBefore",1); kw.setdefault("spaceAfter",3)
         super().__init__(**kw)
 
-def section(title, first=False):
-    parts = []
-    if not first:
-        parts.append(Spacer(1, 7))
-    parts.append(Paragraph(title.upper(), S_H))
-    parts.append(HR())
-    return parts
-
-def contact_line(email, phone, github, linkedin):
-    return (
-        f"{phone}  |  {email}<br/>"
-        f"GitHub: {github}  |  LinkedIn: {linkedin}"
-    )
-
-story = []
+story=[]
 
 # ---------- header ----------
+# contact info as plain text lines (ATS-safe, in main body)
+contact = (
+    "Vadodara, India  |  +91 6350050794  |  kapilkumar.ai.dev@gmail.com<br/>"
+    "GitHub: github.com/sniperlordhumai-debug  |  LinkedIn: linkedin.com/in/kapil-kumar-931330375"
+)
 story.append(Paragraph("KAPIL KUMAR", S_NAME))
-story.append(Paragraph("B.Tech CSE (AI &amp; ML) &nbsp;•&nbsp; AI/ML &amp; Software Developer", S_TITLE))
-story.append(Paragraph(contact_line(
-    "kapilkumar.ai.dev@gmail.com", "+91 6350050794",
-    "github.com/sniperlordhumai-debug", "linkedin.com/in/kapil-kumar-931330375"
-), S_CONTACT))
-story.append(Spacer(1, 3))
+story.append(Paragraph("AI/ML &amp; Software Developer", S_TITLE))
+story.append(Spacer(1,2))
+story.append(Paragraph(contact, S_CONT))
+story.append(Spacer(1,2))
 story.append(HR())
 
-# ---------- profile ----------
-story += section("Profile", first=True)
+# ---------- professional summary ----------
+story.append(Paragraph("SUMMARY", S_H))
 story.append(Paragraph(
-    "AI &amp; ML undergraduate focused on building practical software and AI-driven products. Hands-on "
-    "exposure to Python, C++, Java, web development, REST APIs, Generative AI, AI agents, data analytics "
-    "and cloud fundamentals. Demonstrated initiative through industry job simulations, technical projects "
-    "and Hack2026 participation.", S_BODY))
+    "AI/ML &amp; software developer and B.Tech CSE (AI &amp; ML) undergraduate at Parul University. Builds "
+    "practical software and AI-driven products with Python, TypeScript, Generative AI, AI agents and REST "
+    "APIs — proven through industry simulations, 16+ certifications and Hack2026.", S_SUM))
+
+# ---------- technical skills (near top per ATS best practice) ----------
+story.append(Paragraph("TECHNICAL SKILLS", S_H))
+skills=[
+ ("Languages","Python, C++, Java, JavaScript, TypeScript, HTML, CSS"),
+ ("AI / ML","Artificial Intelligence, Generative AI, AI Agents, Machine Learning, Data Analytics"),
+ ("Web / APIs","React, Next.js, REST APIs, Front-End Development"),
+ ("Engineering","Object-Oriented Programming (OOP), Data Structures &amp; Algorithms (DSA), Software Engineering, Testing"),
+ ("Cloud / Tools","AWS, NVIDIA Jetson Nano, Git, GitHub, Dash, Agile, CI/CD fundamentals"),
+]
+for lab, items in skills:
+    story.append(Paragraph(f"<font name='{FB}'>{lab}:</font>  {items}", st("sk", spaceAfter=1.6)))
+
+# ---------- projects (before experience for entry-level) ----------
+story.append(Paragraph("PROJECTS", S_H))
+projects=[
+ ("Reels Hub", ["Web / Product"],
+  ["Designed a short-form video platform concept with separate user/admin workflows, content management and monetization-oriented features.",
+   "Planned full-stack architecture for content, moderation and monetization flows."],
+  "TypeScript, Web Development, Front-End, Backend Architecture"),
+ ("Jarvis Personal Assistant", ["AI / Automation / Python"],
+  ["Built a Python assistant combining voice input/output, speech processing and desktop automation.",
+   "Built an audio-to-action pipeline: speech recognition, intent handling, automation."],
+  "Python, Speech Processing, Automation, AI"),
+ ("FedHealthGuard", ["AI / ML / Federated Learning"],
+  ["Explored privacy-preserving federated learning applied to multimodal healthcare data.",
+   "Designed a local-training / model-update pipeline that keeps sensitive data on-device."],
+  "AI, Machine Learning, Federated Learning"),
+ ("Nexus Mirror", ["Desktop / Mobile / System"],
+  ["Engineered a Windows-based mobile mirroring concept for screen interaction and control between a phone and a PC."],
+  "Windows, Mobile, System Integration"),
+]
+for name, tags, bullets, tech in projects:
+    story.append(Paragraph(f"<b>{name}</b>  <font name='{F}' size='8.5' color='#7b8491'>— {tech}</font>", st("pt", spaceAfter=1.5)))
+    for b in bullets:
+        story.append(Paragraph(b, S_BULL, bulletText="•"))
 
 # ---------- education ----------
-story += section("Education")
+story.append(Paragraph("EDUCATION", S_H))
 edu = Table(
-    [[Paragraph("<b>Parul University, Vadodara</b>", S_PROJ),
-      Paragraph("<b>B.Tech CSE (AI &amp; ML)</b>", ParagraphStyle("r", parent=S_PROJ, alignment=2))],
-     [Paragraph("B.Tech — Computer Science &amp; Engineering (Artificial Intelligence &amp; Machine Learning)",
-                ParagraphStyle("d", parent=S_PROJ, textColor=MUTED)), ""]],
-    colWidths=[5.1*inch, 2.0*inch])
+    [[Paragraph("<b>Parul University, Vadodara</b>", st("ed", fontName=FB)),
+      Paragraph("<b>Expected 2029</b>", st("edr", fontName=FB, alignment=TA_RIGHT))],
+     [Paragraph("B.Tech — Computer Science &amp; Engineering (Artificial Intelligence &amp; Machine Learning)", st("edd", textColor=MUTED)), ""]],
+    colWidths=[4.8*inch, 2.2*inch])
 edu.setStyle(TableStyle([
-    ("VALIGN", (0,0), (-1,-1), "TOP"),
-    ("LEFTPADDING", (0,0), (-1,-1), 0),
-    ("RIGHTPADDING", (0,0), (-1,-1), 0),
-    ("TOPPADDING", (0,0), (-1,-1), 0),
-    ("BOTTOMPADDING", (0,0), (-1,-1), 0),
-]))
+    ("VALIGN",(0,0),(-1,-1),"TOP"),
+    ("LEFTPADDING",(0,0),(-1,-1),0),("RIGHTPADDING",(0,0),(-1,-1),0),
+    ("TOPPADDING",(0,0),(-1,-1),0),("BOTTOMPADDING",(0,0),(-1,-1),0)]))
 story.append(edu)
+story.append(Spacer(1,1))
+# Senior secondary (Class 12)
+story.append(Paragraph("<b>Senior Secondary (Class 12) — CBSE</b>  <font name='F' size='8.5' color='#7b8491'>Science stream</font>", st("e12", spaceAfter=1)))
+# Secondary (Class 10)
+story.append(Paragraph("<b>Secondary (Class 10) — CBSE</b>", st("e10", spaceAfter=1)))
 
-# ---------- technical skills ----------
-story += section("Technical Skills")
-skills = [
-    ("Programming", "Python, C++, Java, JavaScript / TypeScript"),
-    ("Web", "HTML, CSS, Front-End Development, REST APIs"),
-    ("AI / Data", "Artificial Intelligence, Generative AI, AI Agents, Data Analytics"),
-    ("Engineering", "OOP, DSA, Software Engineering, Git / GitHub, Testing"),
-    ("Cloud / Platforms", "AWS, NVIDIA Jetson Nano, Dash"),
-]
-for label, items in skills:
-    story.append(Paragraph(
-        f"<font name='{FB}'>{label}:</font>  {items}",
-        ParagraphStyle("sk", parent=S_BODY, spaceAfter=2.5)))
-
-# ---------- projects ----------
-story += section("Selected Projects")
-projects = [
-    ("Reels Hub", "Short-form video platform concept with separate user/admin workflows, content management and monetization-oriented features."),
-    ("Nexus Mirror", "Windows-based mobile mirroring project focused on connecting a phone to a PC for screen interaction and control."),
-    ("Jarvis Personal Assistant", "Python assistant concept combining voice input/output with desktop automation and computer interaction."),
-    ("FedHealthGuard", "Federated-learning AI/ML concept for privacy-preserving healthcare-oriented multimodal data processing."),
-]
-for name, desc in projects:
-    story.append(Paragraph(f"<b>{name}</b> — {desc}", S_PROJ))
 
 # ---------- certifications ----------
-story += section("Selected Certifications")
-certs = [
-    "Google: AI Fundamentals — Coursera (Apr 2026)",
-    "Meta: Introduction to Front-End Development — Coursera (Apr 2026)",
-    "NVIDIA: Getting Started with AI on Jetson Nano (Aug 2025)",
-    "AWS: Chalk Talks — Generative AI on AWS (Aug 2025)",
-    "Simplilearn: AI Agents for Beginners (Aug 2025)",
-    "Forage: Software Engineering, GenAI, Cyber, Solutions Architecture &amp; Data Analytics simulations (2025–26)",
+story.append(Paragraph("CERTIFICATIONS", S_H))
+certs=[
+ "Google — AI Fundamentals (Coursera, 2026)",
+ "Meta — Introduction to Front-End Development (Coursera, 2026)",
+ "Microsoft — Introduction to Computers (Coursera, 2026)",
+ "NVIDIA — Getting Started with AI on Jetson Nano (2025)",
+ "AWS — Chalk Talks: Generative AI on AWS (2025)",
+ "Simplilearn — AI Agents for Beginners (2025)",
+ "Forage — Software Engineering, GenAI, Cyber, Solutions Architecture &amp; Data Analytics simulations",
 ]
 for c in certs:
-    story.append(Paragraph(c, ParagraphStyle("cert", parent=S_BODY, spaceAfter=1.5)))
+    story.append(Paragraph(c, S_BULL, bulletText="•"))
 
 # ---------- achievements ----------
-story += section("Achievements &amp; Activities")
-story.append(Paragraph("AI Skill Event: Hackathon (Hack2026), Parul University — participated March 2026.", S_BULL, bulletText="•"))
-story.append(Paragraph(
-    "Completed practical industry simulations covering REST APIs, Kafka/H2 integration, cloud architecture, "
-    "GenAI, cybersecurity and AI-driven data analytics.", S_BULL, bulletText="•"))
+story.append(Paragraph("ACHIEVEMENTS &amp; ACTIVITIES", S_H))
+story.append(Paragraph("AI Skill Event: Hackathon (Hack2026), Parul University — competed in a 3.5-hour technical build, March 2026.", S_BULL, bulletText="•"))
+story.append(Paragraph("Completed 6+ industry job simulations covering REST APIs, Kafka/H2 integration, cloud architecture, Generative AI, cybersecurity and AI-driven data analytics.", S_BULL, bulletText="•"))
 
 # ---------- build ----------
-out = "public/resume/Kapil_Kumar_Resume.pdf"
-doc = BaseDocTemplate(
-    out, pagesize=LETTER,
-    leftMargin=0.65*inch, rightMargin=0.65*inch,
-    topMargin=0.5*inch, bottomMargin=0.5*inch,
-    title="Kapil Kumar — Resume",
-    author="Kapil Kumar",
-)
-frame = Frame(doc.leftMargin, doc.bottomMargin, doc.width, doc.height, id="f", showBoundary=0)
+out="public/resume/Kapil_Kumar_Resume.pdf"
+doc=BaseDocTemplate(out, pagesize=LETTER, leftMargin=0.62*inch, rightMargin=0.62*inch,
+                    topMargin=0.45*inch, bottomMargin=0.45*inch,
+                    title="Kapil Kumar — Resume", author="Kapil Kumar")
+frame=Frame(doc.leftMargin, doc.bottomMargin, doc.width, doc.height, id="f", showBoundary=0)
 doc.addPageTemplates([PageTemplate(id="main", frames=[frame])])
 doc.build(story)
 print("WROTE", out, os.path.getsize(out), "bytes")

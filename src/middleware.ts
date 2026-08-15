@@ -34,7 +34,7 @@ const SECURITY_HEADERS: Record<string, string> = {
   "X-Frame-Options": "SAMEORIGIN",
   "Referrer-Policy": "strict-origin-when-cross-origin",
   "Permissions-Policy":
-    "camera=(), microphone=(), geolocation=(), payment=(), usb=(), magnetometer=(), gyroscope=(), accelerometer=(), interest-cohort=()",
+    "camera=(self), microphone=(self), geolocation=(), payment=(), usb=(), magnetometer=(), gyroscope=(), accelerometer=(), interest-cohort=()",
   "Cross-Origin-Opener-Policy": "same-origin",
   "Cross-Origin-Resource-Policy": "same-origin",
   "X-DNS-Prefetch-Control": "on",
@@ -48,7 +48,27 @@ export const config = {
   ],
 };
 
+/**
+ * Paths that should never be served — dotfiles, env/config files,
+ * source files, build internals, VCS metadata, and common web-server
+ * configs. Requests to these return 404 so we don't reveal existence.
+ */
+const BLOCKED = /(^|\/)(\.env.*|\.git.*|\.gitignore|\.htaccess|\.DS_Store|package\.json|package-lock\.json|yarn\.lock|next\.config\..*|tsconfig\.json|tailwind\.config\.ts|postcss\.config\.mjs|src\/.*|\.next\/.*|node_modules\/.*|\.map$|\.log$|\.sql$|\.pem$|\.key$|\.p12$|README\.md|SECURITY\.md|DEPLOY.*\.md|supabase\/.*)(\?.*)?$/i;
+
 export function middleware(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+
+  // --- Block sensitive / dotfile / internal-file access -------------
+  if (BLOCKED.test(pathname)) {
+    return new NextResponse("Not Found", {
+      status: 404,
+      headers: {
+        "Content-Type": "text/plain",
+        "X-Content-Type-Options": "nosniff",
+      },
+    });
+  }
+
   const response = NextResponse.next();
   for (const [key, value] of Object.entries(SECURITY_HEADERS)) {
     response.headers.set(key, value);

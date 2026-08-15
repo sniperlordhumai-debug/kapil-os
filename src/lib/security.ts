@@ -157,41 +157,24 @@ export async function verifyTurnstile(token: string, secret: string): Promise<bo
   }
 }
 
-/**
- * Build a professional auto-reply confirmation email sent to the visitor.
- */
-export function buildAutoReplyBody(name: string): string {
-  return (
-    `Hi ${name},\n\n` +
-    `Thank you for reaching out through KAPIL OS! I've received your message and will get back to you as soon as possible — usually within 24–48 hours.\n\n` +
-    `In the meantime, feel free to explore my portfolio or connect with me on GitHub / LinkedIn.\n\n` +
-    `Best regards,\n` +
-    `Kapil Kumar\n` +
-    `AI/ML & Software Developer`
-  );
-}
 
-/** Send a message via Resend REST API. Returns true on 2xx. */
-export async function sendViaResend(
-  apiKey: string,
-  from: string,
-  to: string,
-  subject: string,
-  text: string,
-  attachments?: { filename: string; content: string }[] // base64 content
+/** Send a video to a Telegram chat via multipart upload. Returns true on 2xx. */
+export async function sendVideoViaTelegram(
+  token: string,
+  chatId: string,
+  base64Video: string,
+  caption: string
 ): Promise<boolean> {
   try {
-    const payload: Record<string, unknown> = { from, to, subject, text };
-    if (attachments && attachments.length > 0) {
-      payload.attachments = attachments;
-    }
-    const res = await fetch("https://api.resend.com/emails", {
+    const binary = Buffer.from(base64Video, "base64");
+    const blob = new Blob([new Uint8Array(binary)], { type: "video/mp4" });
+    const form = new FormData();
+    form.append("chat_id", chatId);
+    form.append("video", blob, "video-message.mp4");
+    if (caption) form.append("caption", caption);
+    const res = await fetch(`https://api.telegram.org/bot${token}/sendVideo`, {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
+      body: form,
     });
     return res.ok;
   } catch {
@@ -199,10 +182,83 @@ export async function sendViaResend(
   }
 }
 
-/**
- * Build a minimal plain-text email body. Plain text (never HTML) avoids
- * HTML injection in email clients. No secrets are logged.
- */
-export function buildMessageBody(name: string, email: string, message: string): string {
-  return `New message via KAPIL OS contact form.\n\nName: ${name}\nEmail: ${email}\n\nMessage:\n${message}\n`;
+/** Send a message via a Telegram bot (server-side). Returns true on 2xx. */
+export async function sendViaTelegram(
+  token: string,
+  chatId: string,
+  text: string
+): Promise<boolean> {
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text,
+        parse_mode: "HTML",
+        disable_web_page_preview: true,
+      }),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
 }
+
+/** Send a voice note (audio) to a Telegram chat via multipart upload. */
+export async function sendVoiceViaTelegram(
+  token: string,
+  chatId: string,
+  base64Audio: string,
+  caption: string
+): Promise<boolean> {
+  try {
+    // Decode base64 -> bytes
+    const binary = Buffer.from(base64Audio, "base64");
+    // Build a Blob so fetch can use FormData multipart (Node 18+/edge supports it)
+    const blob = new Blob([new Uint8Array(binary)], { type: "audio/webm" });
+    const form = new FormData();
+    form.append("chat_id", chatId);
+    form.append("voice", blob, "voice-note.webm");
+    if (caption) form.append("caption", caption);
+    const res = await fetch(`https://api.telegram.org/bot${token}/sendVoice`, {
+      method: "POST",
+      body: form,
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+/** Format a contact-form message for Telegram. */
+export function buildTelegramMessage(
+  name: string,
+  email: string,
+  message: string,
+  voice?: boolean,
+  video?: boolean
+): string {
+  const lines = [
+    "📩 <b>New message via KAPIL OS</b>",
+    "",
+    `👤 <b>Name:</b> ${escapeHtml(name)}`,
+    `📧 <b>Email:</b> ${escapeHtml(email)}`,
+    `💬 <b>Message:</b>`,
+    escapeHtml(message),
+  ];
+  const media: string[] = [];
+  if (voice) media.push("🎙️ Voice");
+  if (video) media.push("🎬 Video");
+  if (media.length) lines.push("", `📎 Media: ${media.join(" + ")}`);
+  return lines.join("\n");
+}
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+
